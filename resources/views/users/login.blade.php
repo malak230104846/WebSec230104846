@@ -26,6 +26,7 @@
       </div>
       <div class="form-group mb-2">
       <a href="{{route('login_with_google')}}" class="btn btn-success">Login with Google</a>
+      <a href="{{ route('forgot_password') }}" class="btn btn-link">Forgot Password?</a>
       </div>
     </form>
     </div>
