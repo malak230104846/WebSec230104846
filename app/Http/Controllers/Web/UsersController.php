@@ -12,7 +12,8 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\VerificationEmail;
 use Carbon\Carbon;
 use Laravel\Socialite\Facades\Socialite;
-
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Hash;
 
 
 use DB;
@@ -73,23 +74,36 @@ class UsersController extends Controller {
         return redirect('/');
     }
 
-
     public function login(Request $request) {
         return view('users.login');
+    } 
+
+    public function doLogin(Request $request)
+  {
+    $request->validate([
+        'email' => ['required', 'email'],
+        'password' => ['required', 'string'],
+    ]);
+
+    $user = User::where('email', $request->email)->first();
+
+    if (!$user || !Hash::check($request->password, $user->password)) {
+        return back()->withInput()->withErrors(['email' => 'Invalid login information.']);
     }
 
-    public function doLogin(Request $request) {
-    	
-    	if(!Auth::attempt(['email' => $request->email, 'password' => $request->password]))
-            return redirect()->back()->withInput($request->input())->withErrors('Invalid login information.');
-
-        $user = User::where('email', $request->email)->first();
-        Auth::setUser($user);
-        if(!$user->email_verified_at)
-        return redirect()->back()->withInput($request->input())->withErrors('Your email is not verified.');
-
-        return redirect('/');
+    if (is_null($user->email_verified_at)) {
+        return back()->withInput()->withErrors(['email' => 'Your email is not verified.']);
     }
+
+    Auth::login($user);
+
+    if ($user->temp_password) {
+        return redirect()->route('edit_password', $user->id)
+                         ->with('info', 'You are using a temporary password. Please change it now.');
+    }
+
+    return redirect('/')->with('success', 'Login successful.');
+}
 
     public function doLogout(Request $request) {
     	
@@ -180,30 +194,38 @@ class UsersController extends Controller {
         return view('users.edit_password', compact('user'));
     }
 
-    public function savePassword(Request $request, User $user) {
 
-        if(auth()->id()==$user?->id) {
-            
-            $this->validate($request, [
-                'password' => ['required', 'confirmed', Password::min(8)->numbers()->letters()->mixedCase()->symbols()],
+    public function savePassword(Request $request, User $user)
+    {
+        $currentUser = auth()->user();
+    
+        if ($currentUser && $currentUser->id === $user->id) {
+            $request->validate([
+                'password' => ['required', 'confirmed', Password::min(8)],
+                'old_password' => ['required'],
             ]);
-
-            if(!Auth::attempt(['email' => $user->email, 'password' => $request->old_password])) {
-                
-                Auth::logout();
-                return redirect('/');
+    
+            if (!Hash::check($request->old_password, $user->password)) {
+                return redirect()->back()->withErrors(['old_password' => 'The old password is incorrect.']);
             }
+    
+        } elseif ($currentUser && $currentUser->hasPermissionTo('edit_users')) {
+            $request->validate([
+                'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()->mixedCase()->symbols()],
+            ]);
+    
+        } else {
+            abort(403, 'Unauthorized action.');
         }
-        else if(!auth()->user()->hasPermissionTo('edit_users')) {
-
-            abort(401);
-        }
-
-        $user->password = bcrypt($request->password); //Secure
+    
+        $user->password = bcrypt($request->password);
+        $user->temp_password = false;
         $user->save();
-
-        return redirect(route('profile', ['user'=>$user->id]));
+    
+        return redirect()->route('profile', ['user' => $user->id])
+                        ->with('success', 'Password changed successfully!');
     }
+
 
     public function chargeCreditForm(User $user) {
         // Only employees can access this
@@ -273,4 +295,33 @@ class UsersController extends Controller {
         }
        }
 
+
+    public function forgotPassword()
+    {
+        return view('users.forgot_password');
+    }
+
+    public function sendTemporaryPassword(Request $request)
+    {
+        $request->validate([
+            'email' => ['required', 'email', 'exists:users,email'],
+        ]);
+
+        $user = User::where('email', $request->email)->first();
+
+        $tempPassword = Str::random(10);
+        $user->password = bcrypt($tempPassword);
+        $user->temp_password = true;
+        $user->save();
+
+        Mail::raw("Your temporary password is: {$tempPassword}", function ($message) use ($user) {
+            $message->to($user->email)
+                    ->subject('Temporary Password')
+                    ->from('arabm2939@gmail.com', 'websec');
+        });
+
+        return redirect()->route('login')->with('success', 'Temporary password sent to your email.');
+    }
+
 } 
+

